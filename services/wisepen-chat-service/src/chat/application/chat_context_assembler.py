@@ -34,19 +34,14 @@ class ChatContextAssembler:
 
         if not recent_messages:
             try:
-                session: Optional[ChatSession] = await self.session_repo.get_by_id(session_id)
-                if session and session.summary_updated_at:
-                    # 有压缩记录：只拉取压缩时间戳之后的明细，跳过已摘要的历史
-                    history = await self.message_repo.get_after_time(
-                        session_id=session_id,
-                        after=session.summary_updated_at,
-                        limit=settings.CTX_FALLBACK_HISTORY_LIMIT,
-                    )
-                else:
-                    # 无压缩记录：正常拉取最近 N 条
-                    history = await self.message_repo.get_by_session(
-                        session_id, limit=settings.CTX_FALLBACK_HISTORY_LIMIT
-                    )
+                session: Optional[ChatSession] = await self.session_repo.get_session(session_id)
+
+                history = await self.message_repo.list_session_messages(
+                    session_id=session_id,
+                    after=session.summary_updated_at,
+                    limit=settings.CTX_FALLBACK_HISTORY_LIMIT,
+                )
+
                 if history:
                     await self.hot_context_repo.load_messages(session_id, history)
                     return history
@@ -58,7 +53,7 @@ class ChatContextAssembler:
     async def get_session_summary(self, session_id: str) -> Optional[str]:
         """从 MongoDB 读取当前会话的摘要（如有）"""
         try:
-            session: Optional[ChatSession] = await self.session_repo.get_by_id(session_id)
+            session: Optional[ChatSession] = await self.session_repo.get_session(session_id)
             return session.current_summary if session else None
         except Exception:
             return None

@@ -132,7 +132,7 @@ class ChatTurnFinalizer:
             for msg in persistable:
                 if msg.content: msg.build_search_tokens() # 构建搜索向量 (缓解中文分词问题)
 
-            await self.message_repo.save_many(persistable)
+            await self.message_repo.save_messages(persistable)
         except Exception as e:
             log_error("MongoDB 消息归档", e, session=session_id)
 
@@ -153,7 +153,7 @@ class ChatTurnFinalizer:
     async def auto_generate_title(self, session_id: str, user_id: str, user_query: str) -> None:
         """首轮对话后自动为 'New Chat' 会话生成简洁标题"""
         try:
-            session = await self.session_repo.get_by_id(session_id)
+            session = await self.session_repo.get_session(session_id)
             if session.title != "New Chat":
                 return
 
@@ -182,7 +182,7 @@ class ChatTurnFinalizer:
             if not new_title:
                 return
 
-            await self.session_repo.rename(session_id, user_id, new_title)
+            await self.session_repo.rename_session(session_id, user_id, new_title)
         except Exception as e:
             log_error("自动生成标题", e, session=session_id)
 
@@ -249,11 +249,8 @@ class ChatTurnFinalizer:
 
         # 持久化新摘要到 MongoDB，同时写入压缩时间戳
         try:
-            await self.session_repo.update_summary(
-                session_id=session_id,
-                current_summary=new_summary,
-                summary_updated_at=datetime.now(timezone.utc),
-            )
+            await self.session_repo.update_session_summary(session_id=session_id, current_summary=new_summary,
+                                                           summary_updated_at=datetime.now(timezone.utc))
         except Exception as e:
             log_error("摘要持久化", e, session=session_id)
 

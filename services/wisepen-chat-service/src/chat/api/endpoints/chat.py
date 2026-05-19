@@ -74,7 +74,7 @@ async def chat_completions(
     if not req.session_id:
         raise HTTPException(status_code=400, detail="缺少 session_id")
 
-    await session_repo.get_by_id_and_user(req.session_id, user_id)
+    await session_repo.get_session_for_user(req.session_id, user_id)
 
     chat_gen = coordinator.handle_chat(
         user_id=user_id,
