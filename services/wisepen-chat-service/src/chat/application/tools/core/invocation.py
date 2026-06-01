@@ -7,7 +7,7 @@ from common.logger import log_fail
 
 @dataclass
 class ToolCallAccumulator:
-    """Accumulates streamed tool call deltas by model-provided index."""
+    """按模型返回的 index 累积流式 tool call 片段。"""
 
     id: str = ""
     name: str = ""

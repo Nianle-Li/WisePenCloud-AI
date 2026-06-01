@@ -5,13 +5,13 @@ from chat.application.events.base import StreamEvent
 
 @dataclass(frozen=True)
 class StepStartEvent(StreamEvent):
-    """An agent step started."""
+    """一个 agent step 开始。"""
 
     pass
 
 
 @dataclass(frozen=True)
 class StepFinishEvent(StreamEvent):
-    """An agent step finished."""
+    """一个 agent step 结束。"""
 
     pass

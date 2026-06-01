@@ -5,14 +5,14 @@ from chat.application.events.base import StreamEvent
 
 @dataclass(frozen=True)
 class ReasoningStartEvent(StreamEvent):
-    """A reasoning text stream started."""
+    """推理文本流开始。"""
 
     reasoning_id: str
 
 
 @dataclass(frozen=True)
 class ReasoningDeltaEvent(StreamEvent):
-    """A reasoning text stream delta."""
+    """推理文本流增量。"""
 
     reasoning_id: str
     delta: str
@@ -20,6 +20,6 @@ class ReasoningDeltaEvent(StreamEvent):
 
 @dataclass(frozen=True)
 class ReasoningEndEvent(StreamEvent):
-    """A reasoning text stream ended."""
+    """推理文本流结束。"""
 
     reasoning_id: str

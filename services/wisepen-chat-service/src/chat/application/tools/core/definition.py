@@ -36,21 +36,21 @@ class ToolLLMSpec:
 
 @dataclass(frozen=True)
 class ToolRuntimePolicy:
-    """Framework-side execution policy for a tool.
+    """工具的框架侧运行约束。
 
-    Field status:
-    - timeout_seconds: enforced by ToolExecutor with asyncio.wait_for().
-    - reserved: enforced by ToolRegistry.derive() when building ToolScope.
-    - ephemeral_output: propagated to ToolExecutionResult and Role.TOOL messages.
-    - required_context_keys: enforced by RequiredContextHook before tool execution.
-    - max_input_chars: enforced by InputSizeLimitHook before tool execution.
-    - max_output_chars: currently advisory; concrete tools may still truncate locally.
-      Intended owner is a future output-size hook/normalizer in the core result path.
-    - allow_parallel: currently advisory; ToolDispatcher still runs all calls via gather().
-      Intended to support serial groups or high-risk tools that must not run in parallel.
-    - risk_level: currently metadata only. Intended for audit, approval, or policy gating.
-    - timeout_strategy: currently metadata only; timeout_seconds always cancels the task.
-      Intended to support non-cancelling timeout reports or stronger sandbox/process kill.
+    字段状态：
+    - timeout_seconds：已由 ToolExecutor 通过 asyncio.wait_for() 执行。
+    - reserved：已由 ToolRegistry.derive() 在构造 ToolScope 时执行。
+    - ephemeral_output：已传递到 ToolExecutionResult 和 Role.TOOL 消息。
+    - required_context_keys：已由 RequiredContextHook 在工具执行前检查。
+    - max_input_chars：已由 InputSizeLimitHook 在工具执行前检查。
+    - max_output_chars：当前是约束声明，具体工具仍可能自己截断输出。
+      后续应由 core 结果链路中的输出尺寸 hook/normalizer 统一处理。
+    - allow_parallel：当前是约束声明，ToolDispatcher 仍用 gather() 并发执行。
+      后续用于支持串行分组，或禁止高风险工具并行执行。
+    - risk_level：当前只是元数据。后续用于审计、审批或策略阻断。
+    - timeout_strategy：当前只是元数据；timeout_seconds 总是取消协程任务。
+      后续用于支持只标记超时、不取消，或更强的沙箱/进程 kill。
     """
 
     timeout_seconds: float | None = None

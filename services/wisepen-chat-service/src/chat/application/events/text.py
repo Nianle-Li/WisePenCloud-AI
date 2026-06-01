@@ -5,14 +5,14 @@ from chat.application.events.base import StreamEvent
 
 @dataclass(frozen=True)
 class TextStartEvent(StreamEvent):
-    """A normal text stream started."""
+    """普通文本流开始。"""
 
     text_id: str
 
 
 @dataclass(frozen=True)
 class TextDeltaEvent(StreamEvent):
-    """A normal text stream delta."""
+    """普通文本流增量。"""
 
     text_id: str
     delta: str
@@ -20,6 +20,6 @@ class TextDeltaEvent(StreamEvent):
 
 @dataclass(frozen=True)
 class TextEndEvent(StreamEvent):
-    """A normal text stream ended."""
+    """普通文本流结束。"""
 
     text_id: str

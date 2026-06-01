@@ -6,7 +6,7 @@ from chat.application.events.base import StreamEvent
 
 @dataclass(frozen=True)
 class ToolInputStartEvent(StreamEvent):
-    """Tool call input streaming started."""
+    """工具调用输入阶段开始。"""
 
     call_id: str
     tool_name: str
@@ -14,7 +14,7 @@ class ToolInputStartEvent(StreamEvent):
 
 @dataclass(frozen=True)
 class ToolInputAvailableEvent(StreamEvent):
-    """Tool call input is available."""
+    """工具调用输入已完整可用。"""
 
     call_id: str
     tool_name: str
@@ -23,7 +23,7 @@ class ToolInputAvailableEvent(StreamEvent):
 
 @dataclass(frozen=True)
 class ToolOutputAvailableEvent(StreamEvent):
-    """Tool call output is available."""
+    """工具调用输出已可用。"""
 
     call_id: str
     output: Any

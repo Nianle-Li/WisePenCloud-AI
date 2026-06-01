@@ -6,7 +6,7 @@ from chat.application.tools.core.scope import ToolScope
 
 
 class ToolRegistry:
-    """Global tool registry that derives request-scoped tool views."""
+    """全局工具注册表，负责派生请求级工具视图。"""
 
     def __init__(self) -> None:
         self._tools: dict[str, Tool] = {}
@@ -18,11 +18,10 @@ class ToolRegistry:
         return self._tools.get(name)
 
     def schemas(self) -> list[dict[str, Any]]:
-        """Return schemas for all globally registered tools.
+        """返回全局已注册工具的 schema。
 
-        This method is intended for diagnostics and tests. Runtime LLM calls
-        should use ToolScope.schemas() so reserved/allow/deny filtering is
-        applied for the current request.
+        该方法仅用于诊断和测试。运行期 LLM 调用必须使用 ToolScope.schemas()，
+        确保已应用当前请求的 reserved/allow/deny 过滤。
         """
         return [tool.definition.llm_spec.to_openai_tool() for tool in self._tools.values()]
 

@@ -4,7 +4,7 @@ from chat.application.tools.core.definition import Tool
 
 
 class ToolScope:
-    """Immutable view of tools and trusted context for one request."""
+    """一次请求内的工具可见性和可信上下文快照。"""
 
     def __init__(self, *, tools: dict[str, Tool], context: dict[str, Any] | None) -> None:
         self._tools = dict(tools)
