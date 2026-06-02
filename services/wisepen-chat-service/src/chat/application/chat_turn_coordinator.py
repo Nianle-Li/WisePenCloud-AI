@@ -124,7 +124,6 @@ class ChatTurnCoordinator:
         # runtime_discovered_tools 预留给"运行时动态发现的工具"（如 Skill bundle 自带 tools），暂时留空
         # allow_tool_name_set/deny_tool_name_set 预留给未来"用户级工具偏好"接入，暂时留空
         tool_scope = self._tool_registry.derive(
-            session_id=session_id,
             tool_context=tool_context, 
             runtime_discovered_tools=None,
             expose_tool_name_set=expose_tool_name_set,

@@ -5,6 +5,10 @@ from typing import Dict, List, Optional, Iterator, AsyncIterator, Union
 
 from beanie import PydanticObjectId
 
+from chat.application.tools import ToolScope
+from chat.application.tools.core.execution.dispatcher import ToolDispatcher
+from chat.application.tools.core.llm.invocation import ToolCallMessageAccumulator, tool_call_parse
+from chat.application.tools.core.llm.renderer import tool_result_renderer
 from common.logger import log_fail
 from chat.core.config.app_settings import settings
 from chat.domain.entities import ChatMessage, Role
@@ -24,13 +28,6 @@ from chat.application.events import (
     ToolInputAvailableEvent,
     ToolInputStartEvent,
     ToolOutputAvailableEvent,
-)
-from chat.application.tools.core import (
-    ToolBatchReducer,
-    ToolCallAccumulator,
-    ToolCallParser,
-    ToolDispatcher,
-    ToolScope,
 )
 
 
@@ -61,7 +58,7 @@ class _StepDeltaInterpreter:
         self.reasoning_id = reasoning_id
         self.assistant_content: str = ""
         self.assistant_reasoning: str = ""
-        self.accumulators: Dict[int, ToolCallAccumulator] = {}
+        self.accumulators: Dict[int, ToolCallMessageAccumulator] = {}
         self._text_started: bool = False
         self._reasoning_started: bool = False
 
@@ -109,14 +106,14 @@ class _StepDeltaInterpreter:
                 # 按 index 找到对应 accumulator
                 idx = tool_call_delta.index
                 if idx not in self.accumulators:
-                    self.accumulators[idx] = ToolCallAccumulator()
+                    self.accumulators[idx] = ToolCallMessageAccumulator()
                 if tool_call_delta.id: # 累加 id（如果有）
-                    self.accumulators[idx].id = tool_call_delta.id 
+                    self.accumulators[idx].tool_call_id = tool_call_delta.id
                 if tool_call_delta.function: # 累加 function（如果有）
                     if tool_call_delta.function.name: # 累加 name
-                        self.accumulators[idx].name += tool_call_delta.function.name
+                        self.accumulators[idx].tool_name += tool_call_delta.function.name
                     if tool_call_delta.function.arguments: # 累加 arguments
-                        self.accumulators[idx].arguments += tool_call_delta.function.arguments
+                        self.accumulators[idx].tool_call_argument_str += tool_call_delta.function.arguments
         # tool_call 只有在一整轮模型输出结束后，才能确定是不是完整、能不能解析
 
     def close(self) -> Iterator[StreamEvent]:
@@ -140,9 +137,7 @@ class QueryLoopRuntime:
 
     def __init__(self, llm: LLMProvider) -> None:
         self.llm = llm
-        self._tool_call_parser = ToolCallParser()
         self._tool_dispatcher = ToolDispatcher()
-        self._tool_batch_reducer = ToolBatchReducer()
 
     """
     ReAct 循环主入口 (QueryLoop)
@@ -251,9 +246,9 @@ class QueryLoopRuntime:
         # 如果有工具调用，则进入工具阶段
 
         # 解析工具调用
-        invocations = self._tool_call_parser.parse(
+        invocations = tool_call_parse(
             delta_interpreter.accumulators,
-            iteration=iteration,
+            query_loop_iteration=iteration,
         )
 
         # 构造 assistant 的 tool_calls 消息(OpenAI 协议要求)
@@ -266,48 +261,49 @@ class QueryLoopRuntime:
             reasoning_content=delta_interpreter.assistant_reasoning or None,
             tool_calls=[
                 {
-                    "id": invocation.call_id,
+                    "id": invocation.tool_call_id,
                     "type": "function",
                     "function": {
                         "name": invocation.tool_name,
-                        "arguments": json.dumps(invocation.input),
+                        "arguments": json.dumps(invocation.tool_call_arguments),
                     },
                 }
                 for invocation in invocations
             ],
-            ephemeral=False,
         )
         new_messages: List[ChatMessage] = [assistant_msg]
 
         for invocation in invocations:
             # 为每个 parsed tool_call 产生两阶段 input 事件（start + available）
             yield ToolInputStartEvent(
-                call_id=invocation.call_id,
+                call_id=invocation.tool_call_id,
                 tool_name=invocation.tool_name,
             )
             yield ToolInputAvailableEvent(
-                call_id=invocation.call_id,
+                call_id=invocation.tool_call_id,
                 tool_name=invocation.tool_name,
-                input=invocation.input,
+                input=invocation.tool_call_arguments,
             )
 
         # 通过工具 core 并发执行并归约结果
-        batch = await self._tool_dispatcher.dispatch(invocations, tool_scope)
-        reduced = self._tool_batch_reducer.reduce(batch.results)
+        tool_outputs = await self._tool_dispatcher.dispatch(invocations, tool_scope)
 
-        for item in reduced.items:
+        for result in tool_outputs.results:
+
+            result = tool_result_renderer(result, tool_scope.get(result.tool_invocation.tool_name).definition)
+
             yield ToolOutputAvailableEvent(
-                call_id=item.call_id,
-                output=item.llm_content,
+                call_id=result.tool_call_id,
+                output=result.tool_output,
             )
             new_messages.append(
                 ChatMessage(
                     session_id=session_id,
                     role=Role.TOOL,
-                    tool_call_id=item.call_id,
-                    name=item.tool_name,
-                    content=item.llm_content,
-                    ephemeral=item.ephemeral,
+                    tool_call_id=result.tool_call_id,
+                    name=result.tool_name,
+                    content=result.tool_output,
+                    persisted_output_placeholder=result.persisted_output_placeholder,
                 )
             )
 

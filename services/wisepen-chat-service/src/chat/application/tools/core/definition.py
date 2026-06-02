@@ -1,9 +1,9 @@
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any, Protocol, TYPE_CHECKING
+from typing import Any, Protocol, Dict, Callable, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from chat.application.tools.core.checkers import ToolInputHook
+    from chat.application.tools.core.execution.hooks.base import ToolPreflightHook
 
 
 class ToolTimeoutStrategy(StrEnum):
@@ -16,66 +16,83 @@ class ToolRiskLevel(StrEnum):
     MEDIUM = "medium"
     HIGH = "high"
 
+@dataclass(frozen=True)
+class ToolParametersSchema:
+    raw: dict[str, Any]
+
+    def __post_init__(self) -> None:
+        self._validate_schema(self.raw)
+
+    @property
+    def properties(self) -> dict[str, dict[str, Any]]:
+        return self.raw.get("properties") or {}
+
+    @property
+    def required(self) -> tuple[str, ...]:
+        return tuple(self.raw.get("required") or ())
+
+    def to_dict(self) -> dict[str, Any]:
+        return dict(self.raw)
+
+    @staticmethod
+    def _validate_schema(schema: dict[str, Any]) -> None:
+        if not isinstance(schema, dict):
+            raise TypeError("parameters_schema must be a dict.")
+
+        if schema.get("type") != "object":
+            raise ValueError("parameters_schema.type must be 'object'.")
+
+        properties = schema.get("properties", {})
+        if not isinstance(properties, dict):
+            raise ValueError("parameters_schema.properties must be a dict.")
+
+        required = schema.get("required", [])
+        if not isinstance(required, (list, tuple)):
+            raise ValueError("parameters_schema.required must be a list or tuple.")
+
+        if not all(isinstance(item, str) for item in required):
+            raise ValueError("parameters_schema.required must contain only strings.")
+
+        unknown_required = [
+            item for item in required
+            if item not in properties
+        ]
+
+        if unknown_required:
+            raise ValueError(
+                f"parameters_schema.required contains keys not defined in properties: {unknown_required}"
+            )
 
 @dataclass(frozen=True)
 class ToolLLMSpec:
     name: str
     description: str
-    parameters_schema: dict[str, Any]
-
-    def to_openai_tool(self) -> dict[str, Any]:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": self.parameters_schema,
-            },
-        }
-
+    parameters_schema: ToolParametersSchema
 
 @dataclass(frozen=True)
-class ToolRuntimePolicy:
-    """工具的框架侧运行约束。
+class ToolPolicy:
+    """工具策略"""
+    expose_by_default: bool = False # 是否默认暴露给模型
 
-    字段状态：
-    - timeout_seconds：已由 ToolExecutor 通过 asyncio.wait_for() 执行。
-    - reserved：已由 ToolRegistry.derive() 在构造 ToolScope 时执行。
-    - ephemeral_output：已传递到 ToolExecutionResult 和 Role.TOOL 消息。
-    - required_context_keys：已由 RequiredContextHook 在工具执行前检查。
-    - max_input_chars：已由 InputSizeLimitHook 在工具执行前检查。
-    - max_output_chars：当前是约束声明，具体工具仍可能自己截断输出。
-      后续应由 core 结果链路中的输出尺寸 hook/normalizer 统一处理。
-    - allow_parallel：当前是约束声明，ToolDispatcher 仍用 gather() 并发执行。
-      后续用于支持串行分组，或禁止高风险工具并行执行。
-    - risk_level：当前只是元数据。后续用于审计、审批或策略阻断。
-    - timeout_strategy：当前只是元数据；timeout_seconds 总是取消协程任务。
-      后续用于支持只标记超时、不取消，或更强的沙箱/进程 kill。
-    """
+    timeout_seconds: float | None = None # 超时时间
+    timeout_strategy: ToolTimeoutStrategy = ToolTimeoutStrategy.CANCEL_TASK # 超时后策略
 
-    timeout_seconds: float | None = None
-    timeout_strategy: ToolTimeoutStrategy = ToolTimeoutStrategy.CANCEL_TASK
-    reserved: bool = False
-    ephemeral_output: bool = False
-    risk_level: ToolRiskLevel = ToolRiskLevel.LOW
-    required_context_keys: tuple[str, ...] = ()
-    max_input_chars: int | None = None
-    max_output_chars: int | None = None
-    allow_parallel: bool = True
+    persist_output: bool = False # 是否持久化输出 (如果不持久化则需要生成占位符)
+    persisted_output_placeholder_factory: Callable[[dict, Any], str | None] = lambda tool_call_arguments, output: None # 持久化输出的占位生成器
+
+    risk_level: ToolRiskLevel = ToolRiskLevel.LOW # 风险级别
+
+    required_context_keys: tuple[str, ...] = () # 需要的上下文Key
+
+    max_output_chars: int | None = None # 输出最大字符数（超过后截断）
+    allow_parallel: bool = False # 允许并行
 
 
 @dataclass(frozen=True)
 class ToolDefinition:
     llm_spec: ToolLLMSpec
-    runtime_policy: ToolRuntimePolicy = field(default_factory=ToolRuntimePolicy)
-    input_hooks: tuple["ToolInputHook", ...] = ()
-
-
-@dataclass(frozen=True)
-class ToolExecutionRequest:
-    invocation: "ToolInvocation"
-    context: dict[str, Any]
-    policy: ToolRuntimePolicy
+    policy: ToolPolicy = field(default_factory=ToolPolicy)
+    preflight_hooks: tuple['ToolPreflightHook', ...] = ()
 
 
 class Tool(Protocol):
@@ -83,8 +100,5 @@ class Tool(Protocol):
     def definition(self) -> ToolDefinition:
         ...
 
-    async def execute(self, request: ToolExecutionRequest) -> Any:
+    async def execute(self, context: Dict[str, Any], **kwargs) -> Any:
         ...
-
-
-from chat.application.tools.core.invocation import ToolInvocation  # noqa: E402

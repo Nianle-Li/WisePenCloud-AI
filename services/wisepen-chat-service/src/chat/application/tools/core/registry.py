@@ -2,11 +2,31 @@ from collections.abc import Iterable
 from typing import Any
 
 from chat.application.tools.core.definition import Tool
-from chat.application.tools.core.scope import ToolScope
+from chat.application.tools.core.llm.renderer import schema_renderer
 
+class ToolScope:
+    """一次请求内的工具可见性和可信上下文快照"""
+
+    def __init__(self, *, tools: dict[str, Tool], context: dict[str, Any] | None) -> None:
+        self._tools = dict(tools)
+        self._context = dict(context or {})
+        self._schemas: list[dict[str, Any]] = [schema_renderer(tool.definition.llm_spec) for tool in self._tools.values()]
+
+    def schemas(self) -> list[dict[str, Any]]:
+        return list(self._schemas)
+
+    def get(self, name: str) -> Tool | None:
+        return self._tools.get(name)
+
+    @property
+    def context(self) -> dict[str, Any]:
+        return dict(self._context)
+
+    def __len__(self) -> int:
+        return len(self._tools)
 
 class ToolRegistry:
-    """全局工具注册表，负责派生请求级工具视图。"""
+    """全局工具注册表，负责派生请求级工具视图"""
 
     def __init__(self) -> None:
         self._tools: dict[str, Tool] = {}
@@ -23,12 +43,11 @@ class ToolRegistry:
         该方法仅用于诊断和测试。运行期 LLM 调用必须使用 ToolScope.schemas()，
         确保已应用当前请求的 reserved/allow/deny 过滤。
         """
-        return [tool.definition.llm_spec.to_openai_tool() for tool in self._tools.values()]
+        return [schema_renderer(tool.definition.llm_spec) for tool in self._tools.values()]
 
     def derive(
         self,
         *,
-        session_id: str,
         tool_context: dict[str, Any] | None = None,
         runtime_discovered_tools: Iterable[Tool] | None = None,
         expose_tool_name_set: set[str] | None = None,
@@ -44,21 +63,21 @@ class ToolRegistry:
 
         filtered_tools: dict[str, Tool] = {}
         for name, tool in tools.items():
-            policy = tool.definition.runtime_policy
+            policy = tool.definition.policy
 
-            if policy.reserved:
+            if not policy.expose_by_default:
                 if name in expose_tool_name_set:
                     filtered_tools[name] = tool
                 continue
             if allow_tool_name_set is not None and name not in allow_tool_name_set:
                 continue
-            if not policy.reserved and name in deny_tool_name_set:
+            if policy.expose_by_default and name in deny_tool_name_set:
                 continue
 
             filtered_tools[name] = tool
 
         context = dict(tool_context or {})
-        context.setdefault("session_id", session_id)
+
         return ToolScope(tools=filtered_tools, context=context)
 
     def __len__(self) -> int:
