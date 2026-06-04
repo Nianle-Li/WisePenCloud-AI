@@ -1,19 +1,36 @@
 import asyncio
-from typing import Optional
+from typing import Optional, Protocol, runtime_checkable
 
 from common.logger import log_error, log_event
 
-from chat.application.skill_matcher import SkillMatcher
+
+@runtime_checkable
+class Warmable(Protocol):
+    """
+    可预热的缓存组件协议。
+
+    `SkillCacheRefresher` 接受任何满足此协议的对象，
+    使得 `KeywordSkillMatcher`、`SkillAndAgentMatcher` 等实现类无需继承同一基类。
+    """
+
+    async def warmup(self) -> None: ...
 
 
 class SkillCacheRefresher:
     """
-    Skill matcher 缓存的刷新调度器
+    Matcher 缓存的刷新调度器，接受任意满足 Warmable 协议的 matcher。
+
     在启动阶段触发一次 eager warmup（作为"周期刷新的第 0 次"）
-    之后每 ttl_seconds 调一次 matcher.warmup()，使得用户发布的 Skill 变化能在 TTL 内被当前副本感知
+    之后每 ttl_seconds 调一次 matcher.warmup()，使得用户发布的 Skill / AgentTemplate
+    变化能在 TTL 内被当前副本感知。
+
+    Usage:
+        refresher = SkillCacheRefresher(matcher=skill_and_agent_matcher, ttl_seconds=300)
+        await refresher.start()   # 应用启动时调用
+        await refresher.stop()    # 应用关闭时调用
     """
 
-    def __init__(self, matcher: SkillMatcher, ttl_seconds: int) -> None:
+    def __init__(self, matcher: Warmable, ttl_seconds: int) -> None:
         self._matcher = matcher
         self._ttl = max(1, ttl_seconds)
         self._task: Optional[asyncio.Task] = None
@@ -25,9 +42,9 @@ class SkillCacheRefresher:
 
     async def start(self) -> None:
         """
-        启动刷新器
-        先同步完成一次 eager warmup，再挂起周期循环
-        重复调用直接返回
+        启动刷新器。
+        先同步完成一次 eager warmup，再挂起周期循环。
+        重复调用直接返回。
         """
         if self._task is not None:
             return
@@ -40,9 +57,7 @@ class SkillCacheRefresher:
         log_event("Skill cache refresher 已启动", ttl_seconds=self._ttl)
 
     async def stop(self) -> None:
-        """
-        停止刷新器
-        """
+        """停止刷新器。"""
         if self._task is None:
             return
         self._stopping.set()
@@ -56,9 +71,7 @@ class SkillCacheRefresher:
         log_event("Skill cache refresher 已停止")
 
     async def trigger(self) -> None:
-        """
-        触发一次刷新
-        """
+        """触发一次刷新（幂等，并发安全）。"""
         async with self._lock:
             try:
                 await self._matcher.warmup()
@@ -68,7 +81,7 @@ class SkillCacheRefresher:
 
     async def _tick_loop(self) -> None:
         """
-        等待 TTL 或 stop 信号：TTL 到点 → 触发 refresh；stop 被 set → 立刻返回
+        等待 TTL 或 stop 信号：TTL 到点 → 触发 refresh；stop 被 set → 立刻返回。
         """
         while not self._stopping.is_set():
             try:

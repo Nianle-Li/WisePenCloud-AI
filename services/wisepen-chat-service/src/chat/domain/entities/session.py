@@ -4,6 +4,8 @@ from beanie import Document
 from pydantic import Field
 from pymongo import IndexModel, ASCENDING, DESCENDING
 
+from chat.domain.entities.agent_config import AgentConfig
+
 
 class ChatSession(Document):
     """会话实体（Beanie Document，映射到 chat_sessions 集合）"""
@@ -15,6 +17,9 @@ class ChatSession(Document):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     current_summary: Optional[str] = None
     summary_updated_at: Optional[datetime] = None
+
+    # 会话级 Agent 配置；为 None 时 ChatTurnCoordinator 使用 DEFAULT_MAIN_AGENT_CONFIG
+    agent_config: Optional[AgentConfig] = None
 
     class Settings:
         name = "wisepen_chat_session"  # MongoDB 集合名

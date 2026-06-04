@@ -2,6 +2,7 @@ from .session_repo import SessionRepository
 from .message_repo import MessageRepository
 from .hot_context_repo import HotContextRepository
 from .skill_repo import SkillRepository
+from .agent_template_repo import AgentTemplateRepository
 from .model_repo import ModelRepository
 from .provider_repo import ProviderRepository
 
@@ -10,6 +11,7 @@ __all__ = [
     "MessageRepository",
     "HotContextRepository",
     "SkillRepository",
+    "AgentTemplateRepository",
     "ModelRepository",
     "ProviderRepository",
 ]

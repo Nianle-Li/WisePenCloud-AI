@@ -11,6 +11,11 @@ from chat.application.events.tool import (
     ToolInputStartEvent,
     ToolOutputAvailableEvent,
 )
+from chat.application.events.sub_agent import (
+    SubAgentStartEvent,
+    SubAgentStepEvent,
+    SubAgentCompleteEvent,
+)
 
 __all__ = [
     "StreamEvent",
@@ -25,4 +30,7 @@ __all__ = [
     "ToolInputStartEvent",
     "ToolInputAvailableEvent",
     "ToolOutputAvailableEvent",
+    "SubAgentStartEvent",
+    "SubAgentStepEvent",
+    "SubAgentCompleteEvent",
 ]

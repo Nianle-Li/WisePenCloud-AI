@@ -89,6 +89,30 @@ def step_finish() -> str:
 
 
 # =============================================================================
+# 子 Agent 进度
+# =============================================================================
+
+def sub_agent_start(agent_id: str, display_name: str) -> str:
+    """子 Agent 开始执行。"""
+    return _sse({"type": "sub-agent-start", "agentId": agent_id, "displayName": display_name})
+
+
+def sub_agent_step(agent_id: str, delta: str) -> str:
+    """子 Agent 产出增量文本。"""
+    return _sse({"type": "sub-agent-step", "agentId": agent_id, "delta": delta})
+
+
+def sub_agent_complete(agent_id: str, result_summary: str, success: bool) -> str:
+    """子 Agent 完成（成功或失败）。"""
+    return _sse({
+        "type": "sub-agent-complete",
+        "agentId": agent_id,
+        "resultSummary": result_summary,
+        "success": success,
+    })
+
+
+# =============================================================================
 # 来源引用
 # =============================================================================
 
